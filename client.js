@@ -30,7 +30,7 @@ window.__ModuleLoader__.load({
       pending: zh ? '待接入' : 'Coming soon',
       saved: zh ? '已保存，重载插件后生效。' : 'Saved. Reload the plugin to apply.',
       failed: zh ? '操作失败' : 'Failed',
-      note: zh ? 'CodeBuddy 与 CodeArts 默认关闭。停用/移除只改本地账号记录，重载插件后生效。' : 'CodeBuddy and CodeArts are off by default.',
+      note: zh ? '全部 13 条渠道默认启用。停用/移除只改本地账号记录，重载插件后生效。' : 'All thirteen channels are enabled by default. Disable/remove only edits local records; reload the plugin to apply.',
       picks: zh ? '推荐项目' : 'Recommended',
       picksHint: zh ? '同一套 DSH 插件生态里，这两件最常用。' : 'Two companions from the same plugin family.',
     }
@@ -50,7 +50,7 @@ window.__ModuleLoader__.load({
       { id: 'buddy', name: 'CodeBuddy', org: zh ? '腾讯' : 'Tencent' },
       { id: 'codearts', name: 'CodeArts', org: zh ? '华为云' : 'Huawei Cloud' },
     ]
-    const DEFAULT_OFF = ['buddy', 'codearts']
+    const DEFAULT_OFF = []
     const NAME = Object.fromEntries(CHANNELS.map((c) => [c.id, c.name]))
 
     const PICKS = [

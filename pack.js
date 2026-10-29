@@ -29647,127 +29647,8 @@ ${captureLines}` : capture.stack;
   }
 });
 
-// src/tencent-brand-guard.ts
-var BRAND_NEEDLE = String.fromCharCode(
-  68,
-  101,
-  101,
-  112,
-  83,
-  101,
-  101,
-  107,
-  32,
-  72,
-  97,
-  114,
-  110,
-  101,
-  115,
-  115
-);
-var BRAND_REPLACEMENT = "DSH";
-var HARNESS_NAME = BRAND_REPLACEMENT;
-var NEEDLE_LOWER = BRAND_NEEDLE.toLowerCase();
-function escapeRegExp(literal) {
-  return literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-var BRAND_PATTERN = new RegExp(escapeRegExp(BRAND_NEEDLE), "gi");
-function rewriteBrandIdentifiers(text) {
-  if (typeof text !== "string" || text.length === 0) return text;
-  let out = text;
-  if (out.toLowerCase().includes(NEEDLE_LOWER)) out = out.replace(BRAND_PATTERN, BRAND_REPLACEMENT);
-  if (out.toLowerCase().includes(CONTEXT_SENTENCE_NEEDLE.toLowerCase())) {
-    out = out.replace(CONTEXT_SENTENCE_PATTERN, CONTEXT_SENTENCE_REPLACEMENT);
-  }
-  return out;
-}
-var CONTEXT_SENTENCE_NEEDLE = "Relative paths resolve from the workspace root; absolute paths identify files or directories on the host.";
-var CONTEXT_SENTENCE_REPLACEMENT = "Relative paths start at the workspace root; full paths name host files or folders.";
-var CONTEXT_SENTENCE_PATTERN = new RegExp(escapeRegExp(CONTEXT_SENTENCE_NEEDLE), "gi");
-function sanitizeContent(content) {
-  if (typeof content === "string") return rewriteBrandIdentifiers(content);
-  if (!Array.isArray(content)) return content;
-  let changed = false;
-  const next = content.map((block) => {
-    if (block === null || typeof block !== "object") return block;
-    const record = block;
-    if (record.type !== "text" || typeof record.text !== "string") return block;
-    const text = rewriteBrandIdentifiers(record.text);
-    if (text === record.text) return block;
-    changed = true;
-    return { ...block, text };
-  });
-  return changed ? next : content;
-}
-function sanitizeGenerateOptions(options) {
-  if (options === null || typeof options !== "object") return options;
-  const original = options;
-  let system = original.system;
-  if (typeof system === "string") system = rewriteBrandIdentifiers(system);
-  let messages = original.messages;
-  if (Array.isArray(messages)) {
-    let changed = false;
-    const next = [];
-    for (const message2 of messages) {
-      if (message2 === null || typeof message2 !== "object") {
-        next.push(message2);
-        continue;
-      }
-      const record = message2;
-      if (record.role === "developer") {
-        changed = true;
-        continue;
-      }
-      if (record.role === "system") {
-        const content = sanitizeContent(record.content);
-        if (content !== record.content) {
-          changed = true;
-          next.push({ ...message2, content });
-          continue;
-        }
-      }
-      next.push(message2);
-    }
-    if (changed) messages = next;
-  }
-  const systemChanged = system !== original.system;
-  const messagesChanged = messages !== original.messages;
-  if (!systemChanged && !messagesChanged) return options;
-  const copy = { ...options };
-  if (systemChanged) copy.system = system;
-  if (messagesChanged) copy.messages = messages;
-  return copy;
-}
-function wrapAdapterWithSystemSanitizer(adapter) {
-  return new Proxy(adapter, {
-    get(target, prop) {
-      if (prop === "stream") {
-        return (options) => target.stream.call(target, sanitizeGenerateOptions(options));
-      }
-      if (prop === "prepareCall") {
-        const original = Reflect.get(target, prop, target);
-        if (typeof original !== "function") return original;
-        return async (...args) => {
-          const call = await original.apply(
-            target,
-            args.length > 0 ? [sanitizeGenerateOptions(args[0]), ...args.slice(1)] : args
-          );
-          if (call === null || typeof call !== "object") return call;
-          const inner = call.stream;
-          if (typeof inner !== "function") return call;
-          return {
-            ...call,
-            stream: (options) => inner.call(target, sanitizeGenerateOptions(options))
-          };
-        };
-      }
-      return Reflect.get(target, prop, target);
-    }
-  });
-}
-
 // src/system-rewrite.ts
+var HARNESS_NAME = "DSH";
 var current = { identity: "neutral", memory: "keep", runCodeDocs: "keep", headLines: 40 };
 function configureSystemRewrite(next) {
   current = { identity: "neutral", memory: "keep", runCodeDocs: "keep", headLines: 40, ...next ?? {} };
@@ -29814,7 +29695,7 @@ function rewriteSystem(system, meta = {}) {
       text = lines.join("\n");
     }
   }
-  return rewriteBrandIdentifiers(text);
+  return text;
 }
 
 // src/index.ts
@@ -32334,6 +32215,52 @@ var FALLBACK_IMAGE_PRICING = Object.freeze({
   }
 });
 
+// src/role-sanitizer.ts
+function sanitizeGenerateOptions(options) {
+  if (options === null || typeof options !== "object") return options;
+  const original = options;
+  const messages = original.messages;
+  if (!Array.isArray(messages)) return options;
+  const next = [];
+  let changed = false;
+  for (const message2 of messages) {
+    if (message2 !== null && typeof message2 === "object" && message2.role === "developer") {
+      changed = true;
+      continue;
+    }
+    next.push(message2);
+  }
+  if (!changed) return options;
+  return { ...options, messages: next };
+}
+function wrapAdapterWithRoleSanitizer(adapter) {
+  return new Proxy(adapter, {
+    get(target, prop) {
+      if (prop === "stream") {
+        return (options) => target.stream.call(target, sanitizeGenerateOptions(options));
+      }
+      if (prop === "prepareCall") {
+        const original = Reflect.get(target, prop, target);
+        if (typeof original !== "function") return original;
+        return async (...args) => {
+          const call = await original.apply(
+            target,
+            args.length > 0 ? [sanitizeGenerateOptions(args[0]), ...args.slice(1)] : args
+          );
+          if (call === null || typeof call !== "object") return call;
+          const inner = call.stream;
+          if (typeof inner !== "function") return call;
+          return {
+            ...call,
+            stream: (options) => inner.call(target, sanitizeGenerateOptions(options))
+          };
+        };
+      }
+      return Reflect.get(target, prop, target);
+    }
+  });
+}
+
 // src/token-ledger.ts
 var TOKEN_LEDGER_LIMIT = 500;
 var ledger = [];
@@ -32785,7 +32712,7 @@ async function* recordThroughStream(openStream, meta) {
   }
 }
 function registerAdapterIdempotent(llm, providers, adapter, warn) {
-  let target = wrapAdapterWithSystemSanitizer(adapter);
+  let target = wrapAdapterWithRoleSanitizer(adapter);
   target = wrapAdapterWithTokenLedger(providers, target);
   if (typeof adapter === "object" && adapter !== null) {
     try {
@@ -63334,75 +63261,6 @@ async function toImageBlock2(url, bridge, limits, already) {
   return { type: "image", attachment: ref };
 }
 
-// src/openai-gateway/tencent-fingerprint.ts
-var TENCENT_PROVIDERS = ["buddy", "workbuddy"];
-var BRAND = String.fromCharCode(68, 101, 101, 112, 83, 101, 101, 107, 32, 72, 97, 114, 110, 101, 115, 115);
-var CONTENT_FINGERPRINTS = [
-  {
-    // 2026-10-23 实测（本仓库最贵的一次误判）：真正的**主因**不是任何客户端模板句，
-    // 而是**本产品自己的品牌全称**。DSH 的系统提示词第一行就是
-    // `You are an AI agent powered by <品牌全称>.`，于是经本网关调腾讯系渠道时，
-    // 只要客户端把 DSH 的系统提示词原样带进来就必然 400/11128。
-    //
-    // 边界（逐组实发验证，别泛化）：只拦 `messages[0]` 的开头、大小写不敏感；
-    // 放到第 2 条 system、句中、前加空格/制表符/换行、user / tool / tools 里
-    // 一律放行；`workbuddy`（国际版）完全不拦。
-    //
-    // 改写目标是 `DSH` —— 本产品真实缩写，语义等价且**不引入新的身份错觉**
-    // （换成别家平台名会让模型以为自己跑在那边）。
-    find: BRAND,
-    replace: "DSH",
-    note: "2026-10-23 \u672C\u673A\u5BF9 copilot.tencent.com \u5B9E\u6D4B\uFF1A\u539F\u53E5 400\uFF0C\u6539\u5199\u540E 200\uFF1Bwww.workbuddy.ai \u4E0D\u62E6",
-    // **全渠道**：只有腾讯系实测会拦，但「不把本产品品牌名递给任何上游」
-    // 本身对该网关是正确的默认行为，且不含品牌串时是空操作。
-    scope: "all"
-  },
-  {
-    // 2026-10-28 第二个独立触发点（与品牌词无关，也与位置无关）。
-    //
-    // 实测（copilot.tencent.com，同一请求各重复 12 次）：整段真实 DSH 系统提示词
-    // 含此句时 **0/12 通过**；仅把这**一句**换成等义表述、其余逐字节不变，
-    // **12/12 通过**。该句来自 DSH 自身的 run_code 工具说明。
-    //
-    // ⚠️ 是**整句字面量**匹配，不是关键词：单独出现 "absolute paths"、
-    // "identify files or directories"、或只截断到句号前（len 3887）都不会被拦，
-    // 必须该句完整出现才触发。故不要泛化成正则，也不要拆成单词。
-    find: "Relative paths resolve from the workspace root; absolute paths identify files or directories on the host.",
-    replace: "Relative paths start at the workspace root; full paths name host files or folders.",
-    note: "2026-10-28 \u672C\u673A\u5B9E\u6D4B\uFF1A\u542B\u6B64\u53E5 0/12 \u901A\u8FC7\uFF0C\u4EC5\u6539\u6B64\u53E5\u540E 12/12 \u901A\u8FC7"
-  },
-  {
-    // ZCode 内建常量：`$Js="Main branch (you will usually use this for PRs)"`。
-    // 每个 git 仓库里的会话都会被注入（拼在 `Main branch … : <分支名>` 这一行）。
-    find: "Main branch (you will usually use this for PRs)",
-    replace: "Main branch (PRs usually go here)",
-    note: "Gitee IKJNA1\uFF1B\u672C\u673A 2026-10-05 \u5BF9 workbuddy / CodeBuddy \u53CC\u7AEF\u70B9\u5B9E\u6D4B\u590D\u73B0"
-  }
-];
-function escapeRegExp2(literal) {
-  return literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-var COMPILED = CONTENT_FINGERPRINTS.map((rule) => ({
-  replace: rule.replace,
-  findLower: rule.find.toLowerCase(),
-  // `g` = 全部出现都改写；`i` = 大小写不敏感（实测全小写 / 全大写同样被拦）。
-  pattern: new RegExp(escapeRegExp2(rule.find), "gi"),
-  allProviders: rule.scope === "all"
-}));
-function isTencentContentFingerprintProvider(provider) {
-  return TENCENT_PROVIDERS.includes(provider);
-}
-function rewriteTencentContentFingerprints(text, provider) {
-  const tencent = isTencentContentFingerprintProvider(provider);
-  let out = text;
-  for (const rule of COMPILED) {
-    if (!tencent && !rule.allProviders) continue;
-    if (!out.toLowerCase().includes(rule.findLower)) continue;
-    out = out.replace(rule.pattern, rule.replace);
-  }
-  return out;
-}
-
 // src/openai-gateway/messages.ts
 var OpenAiGatewayError = class extends Error {
   constructor(message2, status = 400, type = "invalid_request_error", code = "invalid_request") {
@@ -63539,7 +63397,7 @@ async function convertMessage(raw, provider, model, bridge, limits) {
   if (role === "system" || role === "developer") {
     return createGatewayMessage("system", [{
       type: "text",
-      text: rewriteTencentContentFingerprints(textFromContent(value.content), provider)
+      text: textFromContent(value.content)
     }], gatewaySource());
   }
   if (role === "user") {
@@ -64103,7 +63961,7 @@ async function toMessages(input, provider, model, bridge, limits) {
       if (raw.role === "system" || raw.role === "developer") {
         messages.push(createGatewayMessage("system", [{
           type: "text",
-          text: rewriteTencentContentFingerprints(textFromContent(content), provider)
+          text: textFromContent(content)
         }], gatewaySource()));
         continue;
       }
@@ -64191,7 +64049,7 @@ async function toResponsesGenerateOptions(body, signal, reasoningEffortOverride,
     }
     messages.push(createGatewayMessage("system", [{
       type: "text",
-      text: rewriteTencentContentFingerprints(body.instructions, provider)
+      text: body.instructions
     }], gatewaySource()));
   }
   messages.push(...await toMessages(body.input, provider, model, images.bridge, limits));
@@ -68447,7 +68305,7 @@ function makeReadImageRequest(ctx) {
   };
 }
 function apply(ctx, config = {}) {
-  const excluded = new Set((config.excludeChannels ?? ["buddy", "codearts"]).map((id) => id.trim()).filter(Boolean));
+  const excluded = new Set((config.excludeChannels ?? []).map((id) => id.trim()).filter(Boolean));
   configureSystemRewrite(config.systemRewrite);
   const network = createChannelFetch({ outlet: config.outlet });
   ctx.effect(() => () => {

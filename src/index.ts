@@ -275,7 +275,7 @@ export function makeReadImageRequest(ctx: Context) {
 export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?: ChannelOutlet; excludeChannels?: string[] } = {}): void {
   // 用户决定：不接入 CodeBuddy(buddy) 的模型，也不在新插件里显示。
   // 做成开关而不是删代码：以后想接回来改一行即可。
-  const excluded = new Set((config.excludeChannels ?? ['buddy', 'codearts']).map((id) => id.trim()).filter(Boolean))
+  const excluded = new Set((config.excludeChannels ?? []).map((id) => id.trim()).filter(Boolean))
   configureSystemRewrite((config as { systemRewrite?: Parameters<typeof configureSystemRewrite>[0] }).systemRewrite)
   const network = createChannelFetch({ outlet: config.outlet })
   ctx.effect(() => () => { void network.close() })

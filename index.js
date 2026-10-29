@@ -136,7 +136,7 @@ export function apply(ctx, config = {}) {
           try { payload = JSON.parse((await readBody(req)) || '{}') } catch { return json(res, 400, { ok: false, error: 'invalid json' }) }
           const id = String(payload.id || '').trim()
           if (!id) return json(res, 400, { ok: false, error: 'missing id' })
-          const current = new Set(storedExclusions() ?? ['buddy', 'codearts'])
+          const current = new Set(storedExclusions() ?? [])
           if (payload.enabled === true) current.delete(id)
           else current.add(id)
           mkdirSync(CONFIG_DIR, { recursive: true })
