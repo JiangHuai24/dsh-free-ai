@@ -6,6 +6,8 @@
 原型来自 `dsh-codearts-auth`（Gitee `iJetLi/deepseek-harness-codearts`，MIT，
 提交 `345f0a07`），经由 `dsh-our-free-model` 的 `vendor/channel-pack` 取出。
 
+> **Gemini 渠道需要自备 OAuth 客户端**：设置环境变量 `CMDC_PAK_GOOGLE_CLIENT_ID` 与 `CMDC_PAK_GOOGLE_CLIENT_SECRET`（Google Cloud Console 建「桌面应用」类型客户端，登记重定向 URI `http://localhost:<端口>/oauth-callback`）。仓库不内置任何 Google 凭据。
+
 ## 目录
 
 ```

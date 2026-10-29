@@ -33,26 +33,21 @@ export const GEMINI_USERINFO_ENDPOINT = 'https://www.googleapis.com/oauth2/v2/us
 export const GEMINI_REVOKE_ENDPOINT = 'https://oauth2.googleapis.com/revoke'
 
 /**
- * Google OAuth client 凭据来源：**只从环境变量读，仓库里不存任何值**。
+ * Google OAuth 客户端凭据：**从环境变量读取，不在仓库内置**。
  *
- * ⚠️ 历史上这两个常量写死过上游客户端的 id/secret，被 GitHub 的 push
- * protection 判为 Google OAuth Client Secret 并拒绝推送 —— 那是**正确**的
- * 拦截：客户端密钥不该出现在公开仓库。
- *
- * 使用者需自行在 Google Cloud Console 建一个 OAuth 客户端（类型：桌面应用）
- * 并在启动前导出：
+ * 使用者需在 Google Cloud Console 建一个「桌面应用」类型的 OAuth 客户端，
+ * 并登记重定向 URI `http://localhost:<端口>/oauth-callback`（动态端口，
+ * 见本文件模块头），然后在启动 DSH 前导出：
  *
  * ```
- * CMDC_PAK_GOOGLE_CLIENT_ID=<你的 client id>
- * CMDC_PAK_GOOGLE_CLIENT_SECRET=<你的 client secret>
+ * CMDC_PAK_GOOGLE_CLIENT_ID=<client id>
+ * CMDC_PAK_GOOGLE_CLIENT_SECRET=<client secret>
  * ```
  *
- * 重定向 URI 必须登记为 `http://localhost:<端口>/oauth-callback`（动态端口，
- * 见本文件模块头）。未配置时 {@link geminiClientId} 返回空串，调用方应报
- * 明确的「未配置 Gemini 凭据」错误，而不是拿一个占位值去撞 Google。
+ * 未配置时 {@link geminiClientId} / {@link geminiClientSecret} 返回空串，
+ * 三个入口（buildGeminiAuthUrl / exchangeGeminiCode / refreshGeminiCredential）
+ * 会先调 {@link assertGeminiCredentials} 报出可读错误，而不是拿空值去撞 Google。
  */
-export const GEMINI_DEFAULT_CLIENT_ID = ''
-export const GEMINI_DEFAULT_CLIENT_SECRET = ''
 
 /** 回调路径（与 client 注册值逐字一致，改了就 redirect_uri_mismatch）。 */
 export const GEMINI_CALLBACK_PATH = '/oauth-callback'
@@ -98,12 +93,12 @@ export class GeminiLoginExpiredError extends Error {
   }
 }
 
-/** 生效的 client id（env 优先；未配置时为空串）。 */
+/** 生效的 client id（仅从环境变量读取，未配置时为空串）。 */
 export function geminiClientId(): string {
   return process.env.CMDC_PAK_GOOGLE_CLIENT_ID?.trim() ?? ''
 }
 
-/** 生效的 client secret（env 优先；未配置时为空串）。 */
+/** 生效的 client secret（仅从环境变量读取，未配置时为空串）。 */
 export function geminiClientSecret(): string {
   return process.env.CMDC_PAK_GOOGLE_CLIENT_SECRET?.trim() ?? ''
 }
@@ -111,18 +106,17 @@ export function geminiClientSecret(): string {
 /**
  * 断言 Gemini 凭据已配置。
  *
- * ⚠️ 本仓库**不再内置**任何 Google OAuth 客户端凭据（那会被 GitHub 的
- * push protection 拦下，也确实不该公开）。缺配置时必须**在发起授权前**
- * 报出可读的错误，而不是拿空 client_id 去撞 Google —— 那样用户只会看到
- * 一个没有任何解释的 400。
+ * 仓库不内置任何 Google OAuth 凭据（内置会让公开仓库带一个可被滥用的
+ * client secret）。缺配置时在发起授权前报出可读错误，而不是拿空 client_id
+ * 去撞 Google —— 那样只会得到一个没有解释的 400。
  */
 export function assertGeminiCredentials(): void {
   if (geminiClientId() === '' || geminiClientSecret() === '') {
     throw new Error(
-      'Gemini 渠道未配置 OAuth 客户端：请先设置环境变量 '
+      'Gemini 渠道未配置 OAuth 客户端：请设置环境变量 '
       + 'CMDC_PAK_GOOGLE_CLIENT_ID 与 CMDC_PAK_GOOGLE_CLIENT_SECRET，'
-      + '并在 Google Cloud Console 该客户端上登记重定向 URI '
-      + `http://localhost:<端口>${GEMINI_CALLBACK_PATH}。`,
+      + '并在 Google Cloud Console 为该客户端登记重定向 URI '
+      + `http://localhost:<port>${GEMINI_CALLBACK_PATH}`,
     )
   }
 }
