@@ -1,0 +1,60 @@
+{
+  "name": "free-ai-by-jh",
+  "version": "0.2.0",
+  "description": "Free AI by J.H — 把 11 条免费模型渠道接进 DeepSeek Harness：浏览器登录、多账号池、每日签到领积分、模型黑名单与本地 OpenAI 兼容网关。",
+  "type": "module",
+  "main": "./index.js",
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "free-ai",
+    "channel-pack",
+    "codearts",
+    "workbuddy",
+    "lobsterai",
+    "qoder",
+    "trae",
+    "zcode",
+    "deepseek-harness"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "build:assets": "node scripts/copy-assets.mjs",
+    "build:pack": "node scripts/build-pack.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.2",
+    "jose": "6.1.3",
+    "undici": "8.11.2"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "engines": {
+    "dsh": ">=0.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JiangHuai24/dsh-free-ai.git"
+  },
+  "homepage": "https://github.com/JiangHuai24/dsh-free-ai#readme",
+  "bugs": {
+    "url": "https://github.com/JiangHuai24/dsh-free-ai/issues"
+  },
+  "author": "free-ai-by-jh contributors"
+}

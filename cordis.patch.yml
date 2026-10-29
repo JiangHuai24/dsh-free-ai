@@ -1,0 +1,8 @@
+# Free AI by J.H bundle patch.
+#
+# 这一行把 Host 半身挂进 profile。id 必须与 index.js 的 `export const name` 一致，
+# 否则设置页与存储命名空间会对不上。
+- insert:
+    - id: free-ai-by-jh
+      name: 'free-ai-by-jh'
+      config: {}

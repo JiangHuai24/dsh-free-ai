@@ -1,0 +1,13 @@
+node_modules/
+lib/
+*.log
+.DS_Store
+
+# 上游对照快照（v2.5.9 vendor 源码），仅供本地 diff，不入库
+_baseline-*
+
+# 上游 standalone 前端参考实现，未接进来，不入库
+ui-standalone/
+
+# 本地临时脚本
+_*.mjs
