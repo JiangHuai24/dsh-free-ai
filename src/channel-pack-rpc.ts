@@ -853,7 +853,8 @@ export function registerChannelPackRpc(
   codearts: CodeArtsAuth,
   buddy: BuddyAuth,
   workbuddy: BuddyAuth,
-  lobsterai: LobsteraiAuth,
+  /** 排除该渠道时为 null：RPC 里所有 lobsterai 分支都会先判空。 */
+  lobsterai: LobsteraiAuth | null,
   qoder: QoderAuth,
   /** Qoder **中国版**实例（与 `qoder` 同协议、不同 product；RPC 分支按注册表分派）。 */
   qoderCn: QoderAuth,
@@ -970,7 +971,8 @@ function registerChannelPackEndpoints(
   codearts: CodeArtsAuth,
   buddy: BuddyAuth,
   workbuddy: BuddyAuth,
-  lobsterai: LobsteraiAuth,
+  /** 排除该渠道时为 null：RPC 里所有 lobsterai 分支都会先判空。 */
+  lobsterai: LobsteraiAuth | null,
   qoder: QoderAuth,
   qoderCn: QoderAuth,
   trae: TraeAuth,
@@ -1479,6 +1481,7 @@ function registerChannelPackEndpoints(
         } else if (provider === LOBSTERAI.id) {
           // LobsterAI 与 codearts 同款：回调式登录 + 两步式返回，
           // 理由见上面的 codearts 分支（弹窗拦截导致主页面被跳转）。
+          if (lobsterai === null) return { ok: false, error: { code: 'provider-disabled', message: 'LobsterAI is excluded in this host' } }
           const started = await lobsterai.startLogin({ refName })
           await pool.addAccount({
             id,
@@ -2032,7 +2035,7 @@ function registerChannelPackEndpoints(
               await workbuddy.refreshAccountCredential(entry.credentialRef, pool, entry.id)
               break
             case LOBSTERAI.id:
-              await lobsterai.refreshAccountCredential(entry.credentialRef, pool, entry.id)
+              if (lobsterai !== null) await lobsterai.refreshAccountCredential(entry.credentialRef, pool, entry.id)
               break
             case QODER.id:
             case QODER_CN.id:
@@ -2683,7 +2686,7 @@ function registerChannelPackEndpoints(
         if (req.provider === LOBSTERAI.id) {
           // LobsterAI 的 clientVersion 是签到必填参数，需动态解析
           //（带缓存，通常无额外网络开销）。
-          const clientVersion = await lobsterai.resolveClientVersion()
+          const clientVersion = lobsterai === null ? '' : await lobsterai.resolveClientVersion()
           const value = await collectClaimResults(accounts, LOBSTERAI, {
             resolve: (ref) => ctx.credentials.resolve(ref),
             claim: (credential, product) =>

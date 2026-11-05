@@ -273,9 +273,12 @@ export function makeReadImageRequest(ctx: Context) {
 
 /** 注册 codeartsAuth 服务与 codearts LLM 路由（不注册斜杠命令）。 */
 export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?: ChannelOutlet; excludeChannels?: string[] } = {}): void {
-  // 用户决定：不接入 CodeBuddy(buddy) 的模型，也不在新插件里显示。
-  // 做成开关而不是删代码：以后想接回来改一行即可。
-  const excluded = new Set((config.excludeChannels ?? []).map((id) => id.trim()).filter(Boolean))
+  // 渠道排除开关：默认排除 LobsterAI（有道）。
+  //
+  // 原因（用户 2026-11-05 决定）：有道侧的风控一检测到异常调用就封号，账号
+  // 被封后这条渠道既不能用、还会污染整个账号池的重试逻辑，得不偿失。
+  // 做成开关而不是删代码：以后想接回来只需把这个 id 从默认值里去掉。
+  const excluded = new Set((config.excludeChannels ?? ['lobsterai']).map((id) => id.trim()).filter(Boolean))
   configureSystemRewrite((config as { systemRewrite?: Parameters<typeof configureSystemRewrite>[0] }).systemRewrite)
   const network = createChannelFetch({ outlet: config.outlet })
   ctx.effect(() => () => { void network.close() })
@@ -660,8 +663,8 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
   // 而是本地回调 + authCode 换 token（见 src/lobsterai-oauth.ts）。
   // 服务名由 LobsteraiAuth 依 product.id 派生，注册为 ctx.lobsteraiAuth。
   // 与其他 provider 一样不注册斜杠命令：入口在 Channel Pack 的 LobsterAI 面板。
-  const lobsterai = new LobsteraiAuth(ctx)
-  const lobsteraiAdapter = registerLobsteraiLlm(ctx, {
+  const lobsterai = excluded.has(LOBSTERAI.id) ? null : new LobsteraiAuth(ctx)
+  const lobsteraiAdapter = lobsterai === null ? null : registerLobsteraiLlm(ctx, {
     credentialRef: credentialRef(LOBSTERAI.defaultCredentialRef),
     resolveCredential: async (modelId?: string) => {
       // 只从 LobsterAI 自己的账号池取账号，回退到自己的单凭据 ref，
@@ -697,11 +700,11 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
       // 与 Go 一致：`handler.go:197-209` 也是先 Pick 出账号、再对该账号
       // `RefreshToken(acct)`（而非某个全局单例）。
       const available = await pool.getAvailableAccount(LOBSTERAI.id, '')
-      if (available) await lobsterai.refreshAccountCredential(available.entry.credentialRef, pool, available.entry.id)
-      else await lobsterai.refresh()
+      if (available) await lobsterai!.refreshAccountCredential(available.entry.credentialRef, pool, available.entry.id)
+      else await lobsterai!.refresh()
     },
-    fetchRemoteModels: () => lobsterai.fetchModels(pool),
-    resolveClientVersion: () => lobsterai.resolveClientVersion(),
+    fetchRemoteModels: () => lobsterai!.fetchModels(pool),
+    resolveClientVersion: () => lobsterai!.resolveClientVersion(),
     readImage: makeReadImage(ctx),
     // 图片请求版本（缩放）桥接：issue !IKITT9。该家实测 13 张原图（≈50 MiB）
     // 就回 `SERVER code=500`，撞的是请求体体积。
@@ -1648,7 +1651,7 @@ const zcodeAdapter = registerZcodeLlm(ctx, {
   // 纯本地归一化（幂等），无需重新登录。
   //
   // ⚠️ 幂等 + 失败不阻塞启动（`repairAccountNicknames` 内部逐账号 catch）。
-  void lobsterai.repairAccountNicknames(pool).then((repaired) => {
+  if (lobsterai !== null) void lobsterai.repairAccountNicknames(pool).then((repaired) => {
     if (repaired.length > 0) {
       ctx.logger.info(
         `[channel-pack] 已修正 ${repaired.length} 个 LobsterAI 账号的显示名（手机号改为只露末 2 位）：${repaired.join(', ')}`,
@@ -1689,7 +1692,7 @@ const zcodeAdapter = registerZcodeLlm(ctx, {
     ...(service === null ? [] : ([['codearts', (p) => service.refreshAll(p)]] as const)),
     ...(buddy === null ? [] : ([['buddy', (p) => buddy.refreshAll(p)]] as const)),
     ['workbuddy', (p) => workbuddy.refreshAll(p)],
-    ['lobsterai', (p) => lobsterai.refreshAll(p)],
+    ...(lobsterai === null ? [] : ([['lobsterai', (p) => lobsterai.refreshAll(p)]] as const)),
     ['qoder', (p) => qoder.refreshAll(p)],
     ['qodercn', (p) => qoderCn.refreshAll(p)],
     ['trae', (p) => trae.refreshAll(p)],
@@ -1757,7 +1760,7 @@ const zcodeAdapter = registerZcodeLlm(ctx, {
       service?.stop()
       buddy?.stop()
       workbuddy.stop()
-      lobsterai.stop()
+      lobsterai?.stop()
       qoder.stop()
       qoderCn.stop()
       trae.stop()
@@ -1783,7 +1786,7 @@ const zcodeAdapter = registerZcodeLlm(ctx, {
     service?.stop()
     buddy?.stop()
     workbuddy.stop()
-    lobsterai.stop()
+    lobsterai?.stop()
     qoder.stop()
     qoderCn.stop()
     trae.stop()
@@ -1959,7 +1962,7 @@ const zcodeAdapter = registerZcodeLlm(ctx, {
     ...(codearts === null ? {} : { codearts: pruned(CODEARTS_PROVIDER, codearts) }),
     ...(buddyAdapter === null ? {} : { buddy: pruned('buddy', buddyAdapter) }),
     workbuddy: pruned('workbuddy', workbuddyAdapter),
-    lobsterai: pruned(LOBSTERAI.id, lobsteraiAdapter),
+    ...(lobsteraiAdapter === null ? {} : { lobsterai: pruned(LOBSTERAI.id, lobsteraiAdapter) }),
     qoder: pruned(QODER.id, qoderAdapter),
     qodercn: pruned(QODER_CN.id, qoderCnAdapter),
     trae: pruned(TRAE.id, traeAdapter),

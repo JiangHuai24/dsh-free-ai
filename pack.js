@@ -61034,6 +61034,7 @@ function registerChannelPackEndpoints(ctx, pool, codearts, buddy, workbuddy, lob
           });
           return { ok: true, value: { accountId: id, loginUrl: started.loginUrl } };
         } else if (provider === LOBSTERAI.id) {
+          if (lobsterai === null) return { ok: false, error: { code: "provider-disabled", message: "LobsterAI is excluded in this host" } };
           const started = await lobsterai.startLogin({ refName });
           await pool.addAccount({
             id,
@@ -61412,7 +61413,7 @@ function registerChannelPackEndpoints(ctx, pool, codearts, buddy, workbuddy, lob
               await workbuddy.refreshAccountCredential(entry.credentialRef, pool, entry.id);
               break;
             case LOBSTERAI.id:
-              await lobsterai.refreshAccountCredential(entry.credentialRef, pool, entry.id);
+              if (lobsterai !== null) await lobsterai.refreshAccountCredential(entry.credentialRef, pool, entry.id);
               break;
             case QODER.id:
             case QODER_CN.id:
@@ -61883,7 +61884,7 @@ function registerChannelPackEndpoints(ctx, pool, codearts, buddy, workbuddy, lob
           return { ok: true, value: value2 };
         }
         if (req.provider === LOBSTERAI.id) {
-          const clientVersion = await lobsterai.resolveClientVersion();
+          const clientVersion = lobsterai === null ? "" : await lobsterai.resolveClientVersion();
           const value2 = await collectClaimResults(accounts, LOBSTERAI, {
             resolve: (ref) => ctx.credentials.resolve(ref),
             claim: (credential, product2) => claimLobsteraiDailyCheckin(credential, product2, clientVersion),
@@ -68305,7 +68306,7 @@ function makeReadImageRequest(ctx) {
   };
 }
 function apply(ctx, config = {}) {
-  const excluded = new Set((config.excludeChannels ?? []).map((id) => id.trim()).filter(Boolean));
+  const excluded = new Set((config.excludeChannels ?? ["lobsterai"]).map((id) => id.trim()).filter(Boolean));
   configureSystemRewrite(config.systemRewrite);
   const network = createChannelFetch({ outlet: config.outlet });
   ctx.effect(() => () => {
@@ -68510,8 +68511,8 @@ function apply(ctx, config = {}) {
     accountPool: pool,
     product: WORKBUDDY
   });
-  const lobsterai = new LobsteraiAuth(ctx);
-  const lobsteraiAdapter = registerLobsteraiLlm(ctx, {
+  const lobsterai = excluded.has(LOBSTERAI.id) ? null : new LobsteraiAuth(ctx);
+  const lobsteraiAdapter = lobsterai === null ? null : registerLobsteraiLlm(ctx, {
     credentialRef: credentialRef16(LOBSTERAI.defaultCredentialRef),
     resolveCredential: async (modelId) => {
       const available2 = await pool.getAvailableAccount(LOBSTERAI.id, modelId ?? "");
@@ -69073,7 +69074,7 @@ function apply(ctx, config = {}) {
   }).catch((error) => {
     ctx.logger.warn(`[channel-pack] \u4FEE\u6B63 TRAE \u8D26\u53F7\u663E\u793A\u540D\u5931\u8D25\uFF1A${String(error)}`);
   });
-  void lobsterai.repairAccountNicknames(pool).then((repaired) => {
+  if (lobsterai !== null) void lobsterai.repairAccountNicknames(pool).then((repaired) => {
     if (repaired.length > 0) {
       ctx.logger.info(
         `[channel-pack] \u5DF2\u4FEE\u6B63 ${repaired.length} \u4E2A LobsterAI \u8D26\u53F7\u7684\u663E\u793A\u540D\uFF08\u624B\u673A\u53F7\u6539\u4E3A\u53EA\u9732\u672B 2 \u4F4D\uFF09\uFF1A${repaired.join(", ")}`
@@ -69096,7 +69097,7 @@ function apply(ctx, config = {}) {
     ...service === null ? [] : [["codearts", (p) => service.refreshAll(p)]],
     ...buddy === null ? [] : [["buddy", (p) => buddy.refreshAll(p)]],
     ["workbuddy", (p) => workbuddy.refreshAll(p)],
-    ["lobsterai", (p) => lobsterai.refreshAll(p)],
+    ...lobsterai === null ? [] : [["lobsterai", (p) => lobsterai.refreshAll(p)]],
     ["qoder", (p) => qoder.refreshAll(p)],
     ["qodercn", (p) => qoderCn.refreshAll(p)],
     ["trae", (p) => trae.refreshAll(p)],
@@ -69138,7 +69139,7 @@ function apply(ctx, config = {}) {
       service?.stop();
       buddy?.stop();
       workbuddy.stop();
-      lobsterai.stop();
+      lobsterai?.stop();
       qoder.stop();
       qoderCn.stop();
       trae.stop();
@@ -69156,7 +69157,7 @@ function apply(ctx, config = {}) {
     service?.stop();
     buddy?.stop();
     workbuddy.stop();
-    lobsterai.stop();
+    lobsterai?.stop();
     qoder.stop();
     qoderCn.stop();
     trae.stop();
@@ -69260,7 +69261,7 @@ function apply(ctx, config = {}) {
     ...codearts === null ? {} : { codearts: pruned(PROVIDER, codearts) },
     ...buddyAdapter === null ? {} : { buddy: pruned("buddy", buddyAdapter) },
     workbuddy: pruned("workbuddy", workbuddyAdapter),
-    lobsterai: pruned(LOBSTERAI.id, lobsteraiAdapter),
+    ...lobsteraiAdapter === null ? {} : { lobsterai: pruned(LOBSTERAI.id, lobsteraiAdapter) },
     qoder: pruned(QODER.id, qoderAdapter),
     qodercn: pruned(QODER_CN.id, qoderCnAdapter),
     trae: pruned(TRAE.id, traeAdapter),

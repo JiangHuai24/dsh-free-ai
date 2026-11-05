@@ -29,6 +29,9 @@ function readJson(file, fallback) {
 }
 
 /** 用户在这里改的排除列表优先于插件配置（设置页开关写这个文件）。 */
+/** 默认排除的渠道：LobsterAI(有道) 一检测就封号（用户 2026-11-05 决定）。 */
+const DEFAULT_EXCLUDE = ['lobsterai']
+
 function storedExclusions() {
   const doc = readJson(CONFIG_FILE, null)
   if (doc && Array.isArray(doc.exclude)) return doc.exclude.filter((id) => typeof id === 'string' && id.trim())
@@ -67,7 +70,9 @@ function channelStatus() {
     lastCheckinResult: checkin.lastResult || null,
     services: byProvider,
     points,
-    exclude: storedExclusions() ?? null,
+    // Report what is actually in effect, not just what the user configured:
+    // an unset file must not look like "nothing excluded" when a default applies.
+    exclude: storedExclusions() ?? DEFAULT_EXCLUDE,
   }
 }
 
@@ -136,7 +141,7 @@ export function apply(ctx, config = {}) {
           try { payload = JSON.parse((await readBody(req)) || '{}') } catch { return json(res, 400, { ok: false, error: 'invalid json' }) }
           const id = String(payload.id || '').trim()
           if (!id) return json(res, 400, { ok: false, error: 'missing id' })
-          const current = new Set(storedExclusions() ?? [])
+          const current = new Set(storedExclusions() ?? DEFAULT_EXCLUDE)
           if (payload.enabled === true) current.delete(id)
           else current.add(id)
           mkdirSync(CONFIG_DIR, { recursive: true })
@@ -159,7 +164,9 @@ export function apply(ctx, config = {}) {
     void import('./pack.js').then(mod => {
       if (stopped) return
       try {
-        const exclude = storedExclusions() ?? config.excludeChannels
+        // ⚠ 不能用 `??`：storedExclusions() 返回 [] 时 ?? 不会回退，空数组会覆盖默认值。
+  // 语义应为「用户显式配置过就用配置（哪怕是空），否则用默认」。
+  const exclude = storedExclusions() ?? config.excludeChannels ?? DEFAULT_EXCLUDE
         mod.apply(scoped, { ...config, excludeChannels: exclude })
         try { poolRef = (typeof scoped.get === 'function' ? scoped.get('accountPool') : scoped.accountPool) || null } catch { poolRef = null }
         probe('pack.apply ok; name=' + mod.name + '; exclude=' + JSON.stringify(exclude))
